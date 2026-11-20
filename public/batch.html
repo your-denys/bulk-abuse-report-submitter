@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Batch status</title>
+  <style>
+    :root {
+      --page: #0b1628; --card: #14263f; --row: #1a2d4a; --row-alt: #152640;
+      --field-border: #8792a7; --text: #ffffff; --muted: #c3c9d4;
+      --accent: #4a8fe7; --accent-hover: #3a7bd0;
+      --queued: #8792a7; --running: #e7c04a; --ok: #35c47c; --fail: #ff6b6b;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--page); color: var(--text);
+           font: 400 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    main { max-width: 960px; margin: 32px auto; padding: 0 16px; }
+    .card { background: var(--card); padding: 24px; border: 1px solid #243a5c; border-radius: 4px; }
+    h1 { font-weight: 600; font-size: 20px; margin: 0 0 6px; }
+    .sub { color: var(--muted); margin: 0 0 18px; font-size: 13px; }
+    .sub code { background: #0b1628; padding: 1px 6px; border-radius: 3px; }
+    .summary { display: flex; gap: 16px; flex-wrap: wrap; margin: 0 0 18px; }
+    .chip { background: #0b1628; padding: 6px 12px; border-radius: 3px; font-size: 13px; }
+    .chip b { color: var(--accent); }
+    table { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: 14px; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #243a5c; vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+    tr:nth-child(odd) td { background: var(--row); }
+    tr:nth-child(even) td { background: var(--row-alt); }
+    td.target { font-family: ui-monospace, Menlo, Consolas, monospace; word-break: break-all; }
+    td.result { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; word-break: break-word; }
+    .badge { display: inline-block; padding: 3px 9px; border-radius: 3px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+    .badge.queued { background: #2d3a52; color: var(--queued); }
+    .badge.running { background: #3a3620; color: var(--running); }
+    .badge.success { background: #143e2a; color: var(--ok); }
+    .badge.failed { background: #3e1a1f; color: var(--fail); }
+    .retry { padding: 5px 12px; background: var(--accent); color: #fff; border: 0; border-radius: 3px;
+             font: 500 12px inherit; cursor: pointer; }
+    .retry:hover { background: var(--accent-hover); }
+    .retry[disabled] { opacity: .5; cursor: not-allowed; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 8px; }
+    .toolbar a { color: var(--accent); text-decoration: none; font-size: 14px; }
+    .toolbar a:hover { text-decoration: underline; }
+    .err { color: #ffb3b3; }
+    .cf { color: var(--ok); font-weight: 600; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1>Batch <span id="batch-id"></span></h1>
+    <p class="sub">Target form: <code>https://linkreclamatiogrwc.uk/</code></p>
+
+    <div class="summary">
+      <span class="chip">Type: <b id="meta-type">…</b></span>
+      <span class="chip">Threat: <b id="meta-threat">…</b></span>
+      <span class="chip">Attachment: <b id="meta-attach">…</b></span>
+      <span class="chip">Progress: <b id="progress-text">starting…</b></span>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 44px;">#</th>
+          <th>Target</th>
+          <th style="width: 110px;">Status</th>
+          <th>Result</th>
+          <th style="width: 90px;">Attempts</th>
+          <th style="width: 100px;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+
+    <div class="toolbar">
+      <a href="/">&larr; New batch</a>
+    </div>
+  </div>
+</main>
+<script>
+  const batchId = location.pathname.split("/").pop();
+  document.getElementById("batch-id").textContent = batchId;
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  function renderResult(row) {
+    if (row.status === "success" && row.confirmation) return `<span class="cf">${escapeHtml(row.confirmation)}</span>`;
+    if (row.status === "failed" && row.error) return `<span class="err">${escapeHtml(row.error)}</span>`;
+    return "";
+  }
+  function renderAction(row) {
+    if (row.status === "failed") return `<button class="retry" data-idx="${row.idx}">Retry</button>`;
+    return "";
+  }
+  function renderTarget(t) {
+    const short = t.length > 80 ? t.slice(0, 77) + "…" : t;
+    const singleLine = short.replace(/\s+/g, " ");
+    return `<span title="${escapeHtml(t)}">${escapeHtml(singleLine)}</span>`;
+  }
+  function renderRow(row) {
+    return `<tr data-idx="${row.idx}">
+      <td>${row.idx + 1}</td>
+      <td class="target">${renderTarget(row.target)}</td>
+      <td><span class="badge ${row.status}">${row.status}</span></td>
+      <td class="result">${renderResult(row)}</td>
+      <td class="attempts">${row.attempts}</td>
+      <td class="action">${renderAction(row)}</td>
+    </tr>`;
+  }
+
+  async function tick() {
+    try {
+      const r = await fetch(`/api/batch/${batchId}`, { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const data = await r.json();
+      document.getElementById("meta-type").textContent = data.submission_type;
+      document.getElementById("meta-threat").textContent = data.threat_type;
+      document.getElementById("meta-attach").textContent = data.attachment_name || "none";
+      document.getElementById("rows").innerHTML = data.rows.map(renderRow).join("");
+      const c = { success: 0, failed: 0, running: 0, queued: 0 };
+      data.rows.forEach(r => c[r.status]++);
+      document.getElementById("progress-text").textContent =
+        `${c.success} ok, ${c.failed} failed, ${c.running} running, ${c.queued} queued (of ${data.rows.length})`;
+      if (!data.done) setTimeout(tick, 2000);
+    } catch (e) {
+      document.getElementById("progress-text").textContent = "update failed, retrying…";
+      setTimeout(tick, 4000);
+    }
+  }
+
+  document.getElementById("rows").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button.retry");
+    if (!btn) return;
+    btn.disabled = true;
+    const idx = btn.dataset.idx;
+    try {
+      const r = await fetch(`/api/retry/${batchId}/${idx}`, { method: "POST" });
+      if (!r.ok) { alert("Retry failed: " + await r.text()); btn.disabled = false; return; }
+      tick();
+    } catch (err) {
+      alert("Retry failed: " + err);
+      btn.disabled = false;
+    }
+  });
+
+  tick();
+</script>
+</body>
+</html>

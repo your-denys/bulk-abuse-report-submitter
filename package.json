@@ -1,0 +1,15 @@
+{
+  "name": "bulk-abuse-report-submitter",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Автоотправка формы https://linkreclamatiogrwc.uk/ с решением reCAPTCHA v2 через 2captcha",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {}
+}
